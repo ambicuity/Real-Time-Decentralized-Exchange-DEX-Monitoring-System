@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEX Monitoring Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        .alert-card {
+            transition: all 0.3s ease;
+        }
+        .alert-card.new-alert {
+            animation: pulse 2s;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .stat-card {
+            border-left: 4px solid #007bff;
+        }
+        .stat-card.critical {
+            border-left-color: #dc3545;
+        }
+        .stat-card.high {
+            border-left-color: #fd7e14;
+        }
+        .stat-card.medium {
+            border-left-color: #ffc107;
+        }
+        .stat-card.low {
+            border-left-color: #28a745;
+        }
+        .swap-event {
+            font-size: 0.9em;
+        }
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        .chart-container {
+            height: 400px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Connection Status -->
+    <div class="connection-status">
+        <span id="connectionStatus" class="badge bg-secondary">
+            <i class="fas fa-circle"></i> Connecting...
+        </span>
+    </div>
+
+    <div class="container-fluid py-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="h2 mb-0">
+                    <i class="fas fa-chart-line text-primary"></i>
+                    DEX Monitoring Dashboard
+                </h1>
+                <p class="text-muted">Real-time monitoring of decentralized exchange activity</p>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card critical h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title text-muted mb-1">Active Alerts</h6>
+                                <h3 class="mb-0" id="activeAlerts">-</h3>
+                            </div>
+                            <div class="text-danger">
+                                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title text-muted mb-1">Swaps (1h)</h6>
+                                <h3 class="mb-0" id="recentSwaps">-</h3>
+                            </div>
+                            <div class="text-info">
+                                <i class="fas fa-exchange-alt fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title text-muted mb-1">Volume (1h)</h6>
+                                <h3 class="mb-0" id="totalVolume">-</h3>
+                            </div>
+                            <div class="text-success">
+                                <i class="fas fa-dollar-sign fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="card-title text-muted mb-1">Monitored Pairs</h6>
+                                <h3 class="mb-0" id="monitoredPairs">-</h3>
+                            </div>
+                            <div class="text-warning">
+                                <i class="fas fa-coins fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Alerts Panel -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-bell text-warning"></i>
+                            Recent Alerts
+                        </h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshAlerts()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="alertsList" class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Alerts will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity Panel -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-activity text-info"></i>
+                            Recent Swap Activity
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="swapActivity" class="list-group list-group-flush" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Swap events will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Price Charts -->
+        <div class="row">
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-area text-success"></i>
+                            USDC Price History
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="usdcChart" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-area text-primary"></i>
+                            WETH Price History
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="wethChart" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Initialize Socket.IO connection
+        const socket = io();
+        
+        // Connection status
+        socket.on('connect', function() {
+            document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-circle"></i> Connected';
+            document.getElementById('connectionStatus').className = 'badge bg-success';
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('connectionStatus').innerHTML = '<i class="fas fa-circle"></i> Disconnected';
+            document.getElementById('connectionStatus').className = 'badge bg-danger';
+        });
+
+        // Real-time event handlers
+        socket.on('new_alert', function(alert) {
+            addAlert(alert);
+            updateStats();
+        });
+
+        socket.on('new_swap', function(swap) {
+            addSwapEvent(swap);
+            updateStats();
+        });
+
+        socket.on('alert_resolved', function(data) {
+            removeAlert(data.alert_id);
+            updateStats();
+        });
+
+        // Load initial data
+        window.addEventListener('load', function() {
+            updateStats();
+            loadAlerts();
+            loadSwapActivity();
+            loadPriceCharts();
+            
+            // Set up periodic updates
+            setInterval(updateStats, 30000); // Update stats every 30 seconds
+            setInterval(loadSwapActivity, 60000); // Update swap activity every minute
+            setInterval(loadPriceCharts, 60000); // Update charts every minute
+        });
+
+        function updateStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('activeAlerts').textContent = data.active_alerts || 0;
+                    document.getElementById('recentSwaps').textContent = data.recent_swaps_1h || 0;
+                    document.getElementById('totalVolume').textContent = '$' + (data.total_volume_1h || 0).toLocaleString();
+                    document.getElementById('monitoredPairs').textContent = data.monitored_pairs || 0;
+                })
+                .catch(error => console.error('Error updating stats:', error));
+        }
+
+        function loadAlerts() {
+            fetch('/api/alerts?resolved=false')
+                .then(response => response.json())
+                .then(alerts => {
+                    const alertsList = document.getElementById('alertsList');
+                    alertsList.innerHTML = '';
+                    
+                    if (alerts.length === 0) {
+                        alertsList.innerHTML = '<div class="p-3 text-muted text-center">No active alerts</div>';
+                        return;
+                    }
+                    
+                    alerts.forEach(alert => {
+                        addAlert(alert, false);
+                    });
+                })
+                .catch(error => console.error('Error loading alerts:', error));
+        }
+
+        function addAlert(alert, animate = true) {
+            const alertsList = document.getElementById('alertsList');
+            const alertElement = createAlertElement(alert);
+            
+            if (animate) {
+                alertElement.classList.add('new-alert');
+            }
+            
+            alertsList.insertBefore(alertElement, alertsList.firstChild);
+        }
+
+        function createAlertElement(alert) {
+            const div = document.createElement('div');
+            div.className = `list-group-item alert-card`;
+            div.id = `alert-${alert.id}`;
+            
+            const severityColor = {
+                critical: 'danger',
+                high: 'warning',
+                medium: 'info',
+                low: 'secondary'
+            }[alert.severity] || 'secondary';
+            
+            const severityIcon = {
+                critical: 'exclamation-circle',
+                high: 'exclamation-triangle',
+                medium: 'info-circle',
+                low: 'check-circle'
+            }[alert.severity] || 'info-circle';
+            
+            div.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">
+                            <i class="fas fa-${severityIcon} text-${severityColor}"></i>
+                            ${alert.title}
+                        </h6>
+                        <p class="mb-1">${alert.message}</p>
+                        <small class="text-muted">${new Date(alert.timestamp).toLocaleString()}</small>
+                    </div>
+                    <div>
+                        <span class="badge bg-${severityColor}">${alert.severity.toUpperCase()}</span>
+                        <button class="btn btn-sm btn-outline-success ms-2" onclick="resolveAlert('${alert.id}')">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            return div;
+        }
+
+        function removeAlert(alertId) {
+            const alertElement = document.getElementById(`alert-${alertId}`);
+            if (alertElement) {
+                alertElement.remove();
+            }
+        }
+
+        function resolveAlert(alertId) {
+            fetch(`/api/resolve-alert/${alertId}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    removeAlert(alertId);
+                }
+            })
+            .catch(error => console.error('Error resolving alert:', error));
+        }
+
+        function refreshAlerts() {
+            loadAlerts();
+        }
+
+        function loadSwapActivity() {
+            fetch('/api/swap-events?hours=1')
+                .then(response => response.json())
+                .then(swaps => {
+                    const swapActivity = document.getElementById('swapActivity');
+                    swapActivity.innerHTML = '';
+                    
+                    if (swaps.length === 0) {
+                        swapActivity.innerHTML = '<div class="p-3 text-muted text-center">No recent swap activity</div>';
+                        return;
+                    }
+                    
+                    swaps.slice(0, 20).forEach(swap => {
+                        addSwapEvent({
+                            timestamp: swap.timestamp,
+                            pair: `${swap.token_in_symbol}/${swap.token_out_symbol}`,
+                            amount_in: swap.amount_in,
+                            amount_out: swap.amount_out,
+                            token_in: swap.token_in_symbol,
+                            token_out: swap.token_out_symbol,
+                            price: swap.price,
+                            tx_hash: swap.transaction_hash ? swap.transaction_hash.substring(0, 10) + '...' : 'N/A'
+                        }, false);
+                    });
+                })
+                .catch(error => console.error('Error loading swap activity:', error));
+        }
+
+        function addSwapEvent(swap, animate = true) {
+            const swapActivity = document.getElementById('swapActivity');
+            const swapElement = createSwapElement(swap);
+            
+            if (animate) {
+                swapElement.classList.add('new-alert');
+            }
+            
+            swapActivity.insertBefore(swapElement, swapActivity.firstChild);
+            
+            // Keep only the latest 20 events
+            while (swapActivity.children.length > 20) {
+                swapActivity.removeChild(swapActivity.lastChild);
+            }
+        }
+
+        function createSwapElement(swap) {
+            const div = document.createElement('div');
+            div.className = 'list-group-item swap-event';
+            
+            div.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${swap.amount_in.toFixed(2)} ${swap.token_in}</strong>
+                        <i class="fas fa-arrow-right mx-2"></i>
+                        <strong>${swap.amount_out.toFixed(2)} ${swap.token_out}</strong>
+                    </div>
+                    <small class="text-muted">${new Date(swap.timestamp).toLocaleTimeString()}</small>
+                </div>
+                <small class="text-muted">
+                    Pair: ${swap.pair} | Price: ${swap.price.toFixed(6)} | TX: ${swap.tx_hash}
+                </small>
+            `;
+            
+            return div;
+        }
+
+        function loadPriceCharts() {
+            // Load USDC price chart
+            fetch('/api/price-history/USDC?hours=24')
+                .then(response => response.json())
+                .then(data => {
+                    plotPriceChart('usdcChart', 'USDC Price', data, '#28a745');
+                })
+                .catch(error => console.error('Error loading USDC price data:', error));
+            
+            // Load WETH price chart
+            fetch('/api/price-history/WETH?hours=24')
+                .then(response => response.json())
+                .then(data => {
+                    plotPriceChart('wethChart', 'WETH Price', data, '#007bff');
+                })
+                .catch(error => console.error('Error loading WETH price data:', error));
+        }
+
+        function plotPriceChart(elementId, title, data, color) {
+            if (!data || data.length === 0) {
+                document.getElementById(elementId).innerHTML = '<div class="text-center text-muted p-4">No price data available</div>';
+                return;
+            }
+            
+            const timestamps = data.map(d => new Date(d.timestamp));
+            const prices = data.map(d => d.price_usd);
+            
+            const trace = {
+                x: timestamps,
+                y: prices,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: color, width: 2 },
+                fill: 'tonexty',
+                fillcolor: color + '20'
+            };
+            
+            const layout = {
+                title: title,
+                xaxis: { title: 'Time' },
+                yaxis: { title: 'Price (USD)' },
+                margin: { t: 50, r: 50, b: 50, l: 50 },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            };
+            
+            Plotly.newPlot(elementId, [trace], layout, { responsive: true });
+        }
+    </script>
+</body>
+</html>
