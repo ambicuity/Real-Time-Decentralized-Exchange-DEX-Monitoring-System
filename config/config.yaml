@@ -1,0 +1,64 @@
+# DEX Monitoring System Configuration
+
+# Database Configuration
+database:
+  type: "sqlite"
+  path: "./data/dex_monitor.db"
+  
+# Blockchain Configuration
+blockchain:
+  # Simulated data for demonstration
+  networks:
+    ethereum:
+      rpc_url: "https://eth-mainnet.alchemyapi.io/v2/demo"
+      chain_id: 1
+      contracts:
+        uniswap_v3_factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+        usdc: "0xA0b86a33E6441b2C30B7AdE5c3e77Eeddbfe1Fd8"
+        usdt: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+
+# Market Data Configuration
+market_data:
+  sources:
+    coingecko:
+      api_url: "https://api.coingecko.com/api/v3"
+      rate_limit: 10  # requests per minute for free tier
+    
+# Alert Configuration
+alerts:
+  depeg_threshold: 0.05  # 5% deviation threshold
+  price_change_threshold: 0.10  # 10% price change threshold
+  volume_spike_threshold: 2.0  # 2x normal volume
+  
+  email:
+    enabled: false
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    sender_email: ""
+    sender_password: ""
+    recipients: []
+    
+  webhook:
+    enabled: true
+    urls: []
+
+# Dashboard Configuration
+dashboard:
+  host: "127.0.0.1"
+  port: 5000
+  debug: true
+  update_interval: 5  # seconds
+
+# Monitoring Configuration
+monitoring:
+  poll_interval: 10  # seconds
+  data_retention_days: 30
+  max_log_size_mb: 100
+  
+# Simulation Configuration (for demo purposes)
+simulation:
+  enabled: true
+  event_frequency: 5  # events per minute
+  price_volatility: 0.02  # 2% standard volatility
+  depeg_probability: 0.01  # 1% chance per poll
